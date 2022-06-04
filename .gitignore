@@ -1,0 +1,4 @@
+node_modules
+# vim files <3
+.*.sw?
+*.sw?
