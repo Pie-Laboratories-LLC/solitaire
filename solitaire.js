@@ -1,11 +1,17 @@
 const readline = require('readline-sync');
+const sleep = require('system-sleep');
 
-
-let suits = [ 'C', 'S', 'D', 'H' ];
-let redSuits = [ 'D', 'H' ];
-let blackSuits = [ 'C', 'S' ];
+const suits = [ 'C', 'S', 'D', 'H' ];
+const redSuits = [ 'D', 'H' ];
+const blackSuits = [ 'C', 'S' ];
 // n.b. - is the ace high or low?
-let cards = [ 'A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K' ];
+const cards = [ 'A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K' ];
+const suitCharacterMap = {
+    C: '♣'
+   ,S: '♠'
+   ,D: '♦'
+   ,H: '♥'
+};
 
 // main menu!
 while(1) {
@@ -84,24 +90,54 @@ function playGame() {
     //  the card, e.g., AC, 2C, etc.
     let upSuits = [[],[],[],[]];
 
+    upSuits = [ [ 'AH' ], [ 'AD' ], [ 'AC' ], [ 'AS' ] ];
+    board = [
+        [ [ 'KC', true ], [ 'QD', true ], [ 'JC', true ], [ '10D', true ], [ '9C', true ], [ '8D', true ], [ '7C', true ], [ '6D', true ], [ '5C', true ], [ '4D', true ], [ '3C', true ], [ '2D', true ] ],
+        [ [ 'KD', true ], [ 'QC', true ], [ 'JD', true ], [ '10C', true ], [ '9D', true ], [ '8C', true ], [ '7D', true ], [ '6C', true ], [ '5D', true ], [ '4C', true ], [ '3D', true ], [ '2C', true ] ],
+        [ [ 'KS', true ], [ 'QH', true ], [ 'JS', true ], [ '10H', true ], [ '9S', true ], [ '8H', true ], [ '7S', true ], [ '6H', true ], [ '5S', true ], [ '4H', true ], [ '3S', true ], [ '2H', true ] ],
+        [ [ 'KH', true ], [ 'QS', true ], [ 'JH', true ], [ '10S', true ], [ '9H', true ], [ '8S', true ], [ '7H', true ], [ '6S', true ], [ '5H', true ], [ '4S', true ], [ '3H', true ], [ '2S', true ] ],
+        [ ],
+        [ ],
+        [ ]
+    ];
+    deck = [];
+
     // game loop!
+    let lastLineCount = 0;
+    let extraLineCount = 0;
+    let fini = false;
     while(true) {
+        if(extraLineCount) console.log(`\u001b[${extraLineCount}A`);
+        extraLineCount = 0;
         // draw the board
-        renderBoard(board,deck,kitty,upSuits);
+        lastLineCount = renderBoard(board,deck,kitty,upSuits,lastLineCount);
         // if the player's won the game, it's game over!
         if(checkWinner(board,deck,kitty,upSuits)) return;
 
+        if(fini) {
+            if(doFini(board,upSuits)) { 
+                sleep(500);
+                extraLineCount += 2; 
+                continue;
+            }
+            console.log('Fini finished :(');
+            fini = false;
+            extraLineCount++;
+        }
+
         // if there are cards on the deck still, player can deal to the
         //  kitty
-        if(deck.length) console.log('1) deal to kitty');
+        if(deck.length) { console.log('\u001b[2K1) deal to kitty'); extraLineCount++; }
         // if there are no cards on the deck and cards in the kitty, the
         //  player can reset the kitty to the deck
-        else if(kitty.length) console.log('2) redeal');
+        else if(kitty.length) { console.log('\u001b[2K2) redeal'); extraLineCount++; }
         // when life gives you lemons, give up in existential despair
-        console.log('3) quit');
-        console.log('Or, enter move');
+        console.log('\u001b[2K3) quit');
+        console.log('\u001b[2KOr, enter move');
+        console.log('\u001b[2K');
         // get input from player
-        let input = readline.question('-> ');
+        let input = readline.question('\u001b[2K-> ');
+        extraLineCount += 6;
         if(input == '3') {
             // one hates to overstate things, but one can't help but wonder
             //  if this is what Picasso was thinking of when he invented
@@ -120,6 +156,7 @@ function playGame() {
             // deal to the kitty
             if(!deck.length) {
                 console.log(`Empty deck, can't deal; are you some kind of dirty hacker??!`);
+                extraLineCount++;
                 continue;
             }
             // deal three cards from the deck, or as many as may be left if
@@ -137,6 +174,11 @@ function playGame() {
             while(kitty.length) deck.push(kitty.shift());
             continue;
         }
+        if(input == 'fini') {
+            fini = true;
+            doFini(board,upSuits);
+            continue;
+        }
         // how player can specify the location:
         // 1) kitty 2) u1-u4 for upsuite 3) a-g for column, or a1 to mean
         //  "the second face-up card in column a," or b3 to mean "the fourth
@@ -151,9 +193,10 @@ function playGame() {
         // make sure it's a valid move
         if(!moveMatch) {
             console.log(`That's not a valid move.  Try again, fathead!`);
+            extraLineCount++;
             continue;
         }
-        if(input.match(/^k.*g$/)) console.log('PICK OF DESTINY!!!!');
+        if(input.match(/^k.*g$/)) { console.log('PICK OF DESTINY!!!!'); extraLineCount++ }
 
         // clean up the input, e.g., change "a  3" -> "a3".
         let from = moveMatch[1].replaceAll(/\s+/g,'').toLowerCase();
@@ -161,14 +204,17 @@ function playGame() {
         // do some validation.
         if(to.match(/^[a-g]/) && to.match(/\d$/)) {
             console.log(`You can't specify offset, moving to a column!`);
+            extraLineCount++;
             continue;
         }
         if(to.match(/^u/) && from.match(/^[a-g]/) && from.match(/\d$/)) {
             console.log(`You can't specify offset moving from column to upstack!`);
+            extraLineCount++;
             continue;
         }
         if(to.match(/^k(?:itty)?$/)) {
             console.log(`You can't move _to_ the kitty!`);
+            extraLineCount++;
             continue;
         }
         // perform the move
@@ -177,12 +223,13 @@ function playGame() {
             // moving from the kitty
             if(!kitty.length) {
                 console.log(`You can't move _from_ an empty kitty!`);
-                if(deck.length) console.log(`Try dealing first!`);
+                extraLineCount++;
+                if(deck.length) { console.log(`Try dealing first!`); extraLineCount++; }
                 continue;
             }
             fromCard = kitty[kitty.length - 1];
             // make sure it's a valid move
-            if(!validateMove(fromCard,to,upSuits,board)) continue;
+            if(!validateMove(fromCard,to,upSuits,board)) { extraLineCount++; continue; }
             // remove the card from the kitty
             kitty.pop();
             // perform the move.  Note we have a nice method so when we
@@ -196,11 +243,12 @@ function playGame() {
             // moving from the upsuite
             let fromColumn = parseInt(fromMatch[1]) - 1;
             if(!upSuits[fromColumn].length) {
-                console.log(`upSuit ${fromMatch[1]} is empty!`);
+                console.log(`upSuits ${fromMatch[1]} is empty!`);
+                extraLineCount++;
                 continue;
             }
             fromCard = upSuits[fromColumn][upSuits[fromColumn].length - 1];
-            if(!validateMove(fromCard,to,upSuits,board)) continue;
+            if(!validateMove(fromCard,to,upSuits,board)) { extraLineCount++; continue; }
             upSuits[fromColumn].pop();
             moveTo(fromCard,to,upSuits,board);
             continue;
@@ -215,6 +263,7 @@ function playGame() {
             //  people gonna get sued.  So we'll print a nice message and
             //  continue.
             console.log `LOGIC ERROR! Oops, can't match from ${from}`;
+            extraLineCount++;
             continue;
         }
         // ascii magic.  Figre out the index in the board - an array of
@@ -226,6 +275,7 @@ function playGame() {
 
         if(!fromColumn.length) {
             console.log(`There are no cards in column ${fromMatch[1]}`);
+            extraLineCount++;
             continue;
         }
 
@@ -241,6 +291,7 @@ function playGame() {
             while(fromIndex < fromColumn.length && !fromColumn[fromIndex][1]) fromIndex++;
             if(fromIndex >= fromColumn.length) {
                 console.log(`There are no visible cards in column ${fromMatch[1]}`);
+                extraLineCount++;
                 continue;
             }
 
@@ -250,16 +301,18 @@ function playGame() {
                 let visibleIndex = parseInt(fromMatch[2]);
                 if(fromIndex + visibleIndex >= fromColumn.length) {
                     console.log(`Index ${visibleIndex} exceeds the number of visible cards (${fromColumn.length - fromIndex}) in column ${fromMatch[1]}`);
+                    extraLineCount++;
+                    continue;
                 }
                 fromIndex += visibleIndex;
             }
         }
 
         fromCard = fromColumn[fromIndex][0];
-        if(fromCard == 'QH') console.log('The joker is the only foo-oo-ool, to do anything with you!');
+        if(fromCard == 'QH') { console.log('The joker is the only foo-oo-ool, to do anything with you!'); extraLineCount++ }
 
         // make sure the card is valid
-        if(!validateMove(fromCard,to,upSuits,board)) continue;
+        if(!validateMove(fromCard,to,upSuits,board)) { extraLineCount++; continue; }
 
         // they might be moving a whack of cards
         let cards = fromColumn.splice(fromIndex,fromColumn.length - fromIndex);
@@ -366,7 +419,7 @@ function validateMove(fromCard,to,upSuits,board) {
     }
 
     // now validate that the card being moved is the next lower card to
-    //  what's on the destination: e.g., 9 can go on 10.
+    //  what's on the destination: e.g., 8 can go on 9.
     fromValue = fromCard.substring(0, fromCard.length - 1);
     toValue = boardColumn[boardColumn.length - 1][0].substring(0, boardColumn[boardColumn.length - 1][0].length - 1);
     fromIndexOf = cards.indexOf(fromValue);
@@ -426,7 +479,8 @@ function moveTo(fromCard,to,upSuits,board) {
     board[column].push([fromCard,true]);
 }
 
-function renderBoard(board,deck,kitty,upSuits) {
+function renderBoard(board,deck,kitty,upSuits,lastLineCount) {
+    let lines = [];
     let line = '';
     // 1st line - render the deck 
     if(deck.length) line += 'XXX';
@@ -437,8 +491,7 @@ function renderBoard(board,deck,kitty,upSuits) {
         line += ' | ';
         let kittyIndex = kitty.length - (3 - i);
         if(kittyIndex >= 0) {
-            if(kitty[kittyIndex].startsWith('10')) line += kitty[kittyIndex];
-            else line += ` ${kitty[kittyIndex]}`;
+            line += renderCard(kitty[kittyIndex]);
         }
         else {
             line += '   ';
@@ -452,11 +505,10 @@ function renderBoard(board,deck,kitty,upSuits) {
         first = false;
         if(!suit.length) { line += '   '; continue; }
         let last = suit[suit.length - 1];
-        if(last.startsWith('10')) line += last;
-        else line += ` ${last}`;
+        line += renderCard(last);
     }
     line += ' |';
-    console.log(line);
+    lines.push(line);
     // end of the first line
     // second line - render some helpful text, indicate what cards are
     //  in the kitty...
@@ -468,8 +520,8 @@ function renderBoard(board,deck,kitty,upSuits) {
         first = false;
         line += `U ${parseInt(suitIndex) + 1}`;
     }
-    console.log(line);
-    console.log();
+    lines.push(line);
+    lines.push('');
     // now we can render the board.
     let vIndex = 0;
     let count = 0;
@@ -491,14 +543,13 @@ function renderBoard(board,deck,kitty,upSuits) {
             }
             let card = column[vIndex];
             if(card[1]) {
-                if(card[0].startsWith('10')) line += card[0];
-                else line += ` ${card[0]}`;
+                line += renderCard(card[0]);
             }
             else line += 'XXX';
             line += '    ';
             any = true;
         }
-        console.log(line);
+        lines.push(line);
         if(!any) break;
         vIndex++;
 
@@ -518,8 +569,68 @@ function renderBoard(board,deck,kitty,upSuits) {
     for(let i = 0; i < 7; i++) {
         line += ` ${String.fromCharCode('A'.charCodeAt() + i)}     `
     }
-    console.log(line);
-    console.log();
+    lines.push(line);
+    lines.push('');
+    if(lastLineCount) console.log(`\u001b[${lastLineCount}A`);
+    for(let line of lines) {
+        console.log(`\u001b[2K${line}`);
+    }
+    if(lines.length < lastLineCount) {
+        for(let index = lines.length; index < lastLineCount; index++) {
+            console.log(`\u001b[2K`);
+        }
+        console.log(`\u001b[${lastLineCount - lines.length + 1}A`);
+    }
+    return lines.length;
+}
+
+function renderCard(card) {
+    if(!card.length) throw `LOGIC ERROR!`;
+    let suit = card[card.length - 1];
+    if(!suitCharacterMap.hasOwnProperty(suit)) throw `LOGIC ERROR!`;
+    let value = card.substring(0,card.length - 1);
+    let result = '\u001b[37;1m';
+    if(value != '10') result += ' ';
+    result += value;
+    result += '\u001b[0m';
+    if(redSuits.indexOf(suit) != -1) result += '\u001b[31;1m';
+    result += suitCharacterMap[suit];
+    if(redSuits.indexOf(suit) != -1) result += '\u001b[0m';
+    return result;
+}
+
+function doFini(board,upSuits) {
+    for(let column of board) {
+        if(!column.length) continue;
+        let lastCard = column[column.length - 1][0];
+        let suit = lastCard[lastCard.length - 1];
+        let suitMatch = false;
+        let upCard;
+        let upSuitIndex;
+        let upSuit;
+        for(upSuitIndex = 0; upSuitIndex < upSuits.length; upSuitIndex++) {
+            upSuit = upSuits[upSuitIndex];
+            if(!upSuit.length) continue;
+            upCard = upSuit[upSuit.length - 1];
+            let upSuitSuit = upCard[upCard.length - 1];
+            if(upSuitSuit != suit) continue;
+            suitMatch = true;
+            break;
+        }
+        if(!suitMatch) continue;
+        let value = lastCard.substring(0, lastCard.length - 1);
+        let upValue = upCard.substring(0, upCard.length - 1);
+        let valueIndex = cards.indexOf(value);
+        let upValueIndex = cards.indexOf(upValue);
+        if(valueIndex == -1 || upValueIndex == -1) return false;
+        if(valueIndex != upValueIndex + 1) continue;
+        column.pop();
+        upSuit.push(lastCard);
+        // show last card if not shown.
+        if(column.length && !column[column.length - 1][1]) column[column.length - 1][1] = true;
+        return true;
+    }
+    return false
 }
 
 function getRandomInt(max) {
