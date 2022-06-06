@@ -193,8 +193,8 @@ function playGame() {
         if(fromMatch) {
             // moving from the upsuite
             let fromColumn = parseInt(fromMatch[1]) - 1;
-            if(!upSuite[fromColumn].length) {
-                console.log(`upSuite ${fromMatch[1]} is empty!`);
+            if(!upSuit[fromColumn].length) {
+                console.log(`upSuit ${fromMatch[1]} is empty!`);
                 continue;
             }
             fromCard = upSuits[fromColumn][upSuits[fromColumn].length - 1];
@@ -354,7 +354,7 @@ function validateMove(fromCard,to,upSuits,board) {
             return false;
         }
         if(blackSuits.indexOf(toSuit) == -1) {
-            console.log(`LOGIC ERROR! toSuit ${toSuit} isn't a redSuit or a blackSuit! :(`;
+            console.log(`LOGIC ERROR! toSuit ${toSuit} isn't a redSuit or a blackSuit! :(`);
             return false;
         }
     }
@@ -378,7 +378,7 @@ function validateMove(fromCard,to,upSuits,board) {
         return false;
     }
     // NOTE - this is the _opposite_ logic we checked when moving to
-    //  upSuites, because upSuites increase but moving to a column on the
+    //  upSuits, because upSuits increase but moving to a column on the
     //  board, the card values decrease.
     if(toIndexOf != fromIndexOf + 1) {
         console.log(`Can't put ${fromCard} (${fromIndexOf}) on ${boardColumn[boardColumn.length - 1][0]} (${toIndexOf})`);
@@ -413,7 +413,7 @@ function moveTo(fromCard,to,upSuits,board) {
     let toMatch = to.match(/^u(\d+)/i);
     let column;
     if(toMatch) {
-        // moving to an upSuite?
+        // moving to an upSuit?
         column = parseInt(toMatch[1]) - 1;
         upSuits[column].push(fromCard);
         return;
