@@ -193,7 +193,7 @@ function playGame() {
         if(fromMatch) {
             // moving from the upsuite
             let fromColumn = parseInt(fromMatch[1]) - 1;
-            if(!upSuit[fromColumn].length) {
+            if(!upSuits[fromColumn].length) {
                 console.log(`upSuit ${fromMatch[1]} is empty!`);
                 continue;
             }
