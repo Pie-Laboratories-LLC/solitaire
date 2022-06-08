@@ -339,7 +339,7 @@ function validateMove(fromCard,to,upSuits,board) {
     if(!boardColumn.length) {
         if(fromCard[0] == 'K') return true;
         console.log(`Can only move a King to empty column ${to}, not ${renderCard(fromCard)} :(`);
-        return true;
+        return false;
     }
     if(!boardColumn[boardColumn.length - 1][1]) throw `Logic error - last card in ${to} is not visible :(`;
 
