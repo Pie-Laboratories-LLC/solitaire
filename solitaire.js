@@ -1,11 +1,17 @@
 const readline = require('readline-sync');
 
 
-let suits = [ 'C', 'S', 'D', 'H' ];
-let redSuits = [ 'D', 'H' ];
-let blackSuits = [ 'C', 'S' ];
+const suits = [ 'C', 'S', 'D', 'H' ];
+const redSuits = [ 'D', 'H' ];
+const blackSuits = [ 'C', 'S' ];
 // n.b. - is the ace high or low?
-let cards = [ 'A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K' ];
+const values = [ 'A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K' ];
+const suitCharacterMap = {
+    C: '♣'
+   ,S: '♠'
+   ,D: '♦'
+   ,H: '♥'
+};
 
 // main menu!
 while(1) {
@@ -31,8 +37,8 @@ function playGame() {
     let deck = [];
     // initialize deck
     for(let suit of suits) {
-        for(let card of cards) {
-            deck.push(`${card}${suit}`);
+        for(let value of values) {
+            deck.push([value,suit]);
         }
     }
     // shuffle deck.  15 times the deck length swaps of cards.  This is
@@ -196,7 +202,7 @@ function playGame() {
             // moving from the upsuite
             let fromColumn = parseInt(fromMatch[1]) - 1;
             if(!upSuits[fromColumn].length) {
-                console.log(`upSuit ${fromMatch[1]} is empty!`);
+                console.log(`upSuits ${fromMatch[1]} is empty!`);
                 continue;
             }
             fromCard = upSuits[fromColumn][upSuits[fromColumn].length - 1];
@@ -296,31 +302,31 @@ function validateMove(fromCard,to,upSuits,board) {
         column = parseInt(toMatch[1]) - 1;
         let upSuit = upSuits[column];
         if(!upSuit.length) {
-            if(fromCard.match(/^a/i)) return true;
+            if(fromCard[0] == 'A') return true;
             console.log(`You can only move an ace to an empty stack!`);
             return false;
         }
         // make sure the suit matches
-        if(fromCard[fromCard.length - 1].toLowerCase() != upSuit[0][upSuit[0].length - 1].toLowerCase()) {
-            console.log(`You can't move a ${fromCard[fromCard.length - 1].toUpperCase()} to a stack of ${upSuit[0].toUpperCase()}`);
+        if(fromCard[1] != upSuit[upSuit.length - 1][1]) {
+            console.log(`You can't move a ${renderSuit(fromCard[1])} to a stack of ${renderSuit(upSuit[upSuit.length - 1][1])}`);
             return false;
         }
         // make sure the card being moved is the next card for this suit.
         //  little surprising it's as difficult as it is to do this.
-        fromValue = fromCard.substring(0, fromCard.length - 1);
-        toValue = upSuit[upSuit.length - 1].substring(0, upSuit[upSuit.length - 1].length - 1);
-        fromIndexOf = cards.indexOf(fromValue);
-        toIndexOf = cards.indexOf(toValue);
+        fromValue = fromCard[0];
+        toValue = upSuit[upSuit.length - 1][0];
+        fromIndexOf = values.indexOf(fromValue);
+        toIndexOf = values.indexOf(toValue);
         if(fromIndexOf == -1) {
-            console.log(`LOGIC ERROR! Couldn't find index of ${fromValue} in cards :(`);
+            console.log(`LOGIC ERROR! Couldn't find index of ${fromValue} in values :(`);
             return false;
         }
         if(toIndexOf == -1) {
-            console.log(`LOGIC ERROR! Couldn't find index of ${toValue} in cards :(`);
+            console.log(`LOGIC ERROR! Couldn't find index of ${toValue} in values :(`);
             return false;
         }
         if(fromIndexOf != toIndexOf + 1) {
-            console.log(`Can't put ${fromCard} (${fromIndexOf}) on ${upSuit[upSuit.length - 1]} (${toIndexOf})`);
+            console.log(`Can't put ${renderCard(fromCard)} (${fromIndexOf}) on ${renderCard(upSuit[upSuit.length - 1])} (${toIndexOf})`);
             return false;
         }
         return true;
@@ -331,18 +337,18 @@ function validateMove(fromCard,to,upSuits,board) {
     // get the column to which they're moving
     let boardColumn = board[column];
     if(!boardColumn.length) {
-        if(fromCard.startsWith('K')) return true;
-        console.log(`Can only move a King to empty column ${to}, not ${fromCard} :(`);
+        if(fromCard[0] == 'K') return true;
+        console.log(`Can only move a King to empty column ${to}, not ${renderCard(fromCard)} :(`);
         return true;
     }
     if(!boardColumn[boardColumn.length - 1][1]) throw `Logic error - last card in ${to} is not visible :(`;
 
     // make sure they alternate suits
-    let fromSuit = fromCard[fromCard.length - 1];
-    let toSuit = boardColumn[boardColumn.length - 1][0][boardColumn[boardColumn.length - 1][0].length - 1];
+    let fromSuit = fromCard[1];
+    let toSuit = boardColumn[boardColumn.length - 1][0][1];
     if(blackSuits.indexOf(fromSuit) != -1) {
         if(blackSuits.indexOf(toSuit) != -1) {
-            console.log(`Can't move black suit ${fromSuit} of ${fromCard} onto black suit ${toSuit} of ${boardColumn[boardColumn.length - 1][0]}`);
+            console.log(`Can't move black suit ${renderSuit(fromSuit)} of ${renderCard(fromCard)} onto black suit ${renderSuit(toSuit)} of ${renderCard(boardColumn[boardColumn.length - 1][0])}`);
             return false;
         }
         if(redSuits.indexOf(toSuit) == -1) {
@@ -352,7 +358,7 @@ function validateMove(fromCard,to,upSuits,board) {
     }
     else if(redSuits.indexOf(fromSuit) != -1) {
         if(redSuits.indexOf(toSuit) != -1) {
-            console.log(`Can't move red suit ${fromSuit} of ${fromCard} onto red suit ${toSuit} of ${boardColumn[boardColumn.length - 1][0]}`);
+            console.log(`Can't move red suit ${renderSuit(fromSuit)} of ${renderCard(fromCard)} onto red suit ${renderSuit(toSuit)} of ${renderCard(boardColumn[boardColumn.length - 1][0])}`);
             return false;
         }
         if(blackSuits.indexOf(toSuit) == -1) {
@@ -366,24 +372,24 @@ function validateMove(fromCard,to,upSuits,board) {
     }
 
     // now validate that the card being moved is the next lower card to
-    //  what's on the destination: e.g., 9 can go on 10.
-    fromValue = fromCard.substring(0, fromCard.length - 1);
-    toValue = boardColumn[boardColumn.length - 1][0].substring(0, boardColumn[boardColumn.length - 1][0].length - 1);
-    fromIndexOf = cards.indexOf(fromValue);
-    toIndexOf = cards.indexOf(toValue);
+    //  what's on the destination: e.g., 8 can go on 9
+    fromValue = fromCard[0];
+    toValue = boardColumn[boardColumn.length - 1][0][0];
+    fromIndexOf = values.indexOf(fromValue);
+    toIndexOf = values.indexOf(toValue);
     if(fromIndexOf == -1) {
-        console.log(`Couldn't find index of ${fromValue} in cards :(`);
+        console.log(`Couldn't find index of ${fromValue} in values :(`);
         return false;
     }
     if(toIndexOf == -1) {
-        console.log(`Couldn't find index of ${toValue} in cards :(`);
+        console.log(`Couldn't find index of ${toValue} in values :(`);
         return false;
     }
     // NOTE - this is the _opposite_ logic we checked when moving to
     //  upSuits, because upSuits increase but moving to a column on the
     //  board, the card values decrease.
     if(toIndexOf != fromIndexOf + 1) {
-        console.log(`Can't put ${fromCard} (${fromIndexOf}) on ${boardColumn[boardColumn.length - 1][0]} (${toIndexOf})`);
+        console.log(`Can't put ${renderCard(fromCard)} (${fromIndexOf}) on ${renderCard(boardColumn[boardColumn.length - 1][0])} (${toIndexOf})`);
         return false;
     }
     return true;
@@ -436,13 +442,8 @@ function renderBoard(board,deck,kitty,upSuits) {
     for(let i = 0; i < 3; i++) {
         line += ' | ';
         let kittyIndex = kitty.length - (3 - i);
-        if(kittyIndex >= 0) {
-            if(kitty[kittyIndex].startsWith('10')) line += kitty[kittyIndex];
-            else line += ` ${kitty[kittyIndex]}`;
-        }
-        else {
-            line += '   ';
-        }
+        if(kittyIndex >= 0) line += renderCard(kitty[kittyIndex]);
+        else line += '   ';
     }
     line += ' |    | ';
     // render the upSuits.
@@ -452,8 +453,7 @@ function renderBoard(board,deck,kitty,upSuits) {
         first = false;
         if(!suit.length) { line += '   '; continue; }
         let last = suit[suit.length - 1];
-        if(last.startsWith('10')) line += last;
-        else line += ` ${last}`;
+        line += renderCard(last);
     }
     line += ' |';
     console.log(line);
@@ -490,10 +490,7 @@ function renderBoard(board,deck,kitty,upSuits) {
                 continue;
             }
             let card = column[vIndex];
-            if(card[1]) {
-                if(card[0].startsWith('10')) line += card[0];
-                else line += ` ${card[0]}`;
-            }
+            if(card[1]) line += renderCard(card[0]);
             else line += 'XXX';
             line += '    ';
             any = true;
@@ -520,6 +517,37 @@ function renderBoard(board,deck,kitty,upSuits) {
     }
     console.log(line);
     console.log();
+}
+
+// credit where it's due - https://www.lihaoyi.com/post/BuildyourownCommandLinewithANSIescapecodes.html
+function renderCard(card) {
+    let suit = card[1];
+    let value = card[0];
+    // bright white.
+    let result = '\u001b[37;1m';
+    // cards render in 3 characters; so pad '4C' so it and '10C' take the same
+    //  space
+    if(value != '10') result += ' ';
+    result += value;
+    // reset color.
+    result += '\u001b[0m';
+    result += renderSuit(suit);
+    return result;
+}
+
+function renderSuit(suit) {
+    // make sure we recognize the suit.
+    if(!suitCharacterMap.hasOwnProperty(suit)) throw `LOGIC ERROR ${suit}!`;
+
+    let result = '';
+
+    // if it's a red suit, render suit in red; otherwise default to white on
+    //  black for clubs/spades
+    if(redSuits.indexOf(suit) != -1) result += '\u001b[31;1m';
+    result += suitCharacterMap[suit];
+    if(redSuits.indexOf(suit) != -1) result += '\u001b[0m';
+
+    return result;
 }
 
 function getRandomInt(max) {
