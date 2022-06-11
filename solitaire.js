@@ -1,17 +1,11 @@
 const readline = require('readline-sync');
 
 
-const suits = [ 'C', 'S', 'D', 'H' ];
-const redSuits = [ 'D', 'H' ];
-const blackSuits = [ 'C', 'S' ];
+const suits = [ '♣', '♠', '♦', '♥' ];
+const redSuits = [ '♦', '♥' ];
+const blackSuits = [ '♣', '♠' ];
 // n.b. - is the ace high or low?
 const values = [ 'A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K' ];
-const suitCharacterMap = {
-    C: '♣'
-   ,S: '♠'
-   ,D: '♦'
-   ,H: '♥'
-};
 
 // main menu!
 while(1) {
@@ -481,7 +475,6 @@ function cardIsBlack(card) {
 
 function cardGetSuit(card) {
     if(!card.hasOwnProperty('length') || card.length != 2) throw `The thing ${card} passed to me doesn't look like a card`;
-    if(!suitCharacterMap.hasOwnProperty(card[1])) throw `Couldn't determine the suit of ${card} from ${card[1]}`;
     return card[1];
 }
 
@@ -602,7 +595,7 @@ function renderSuit(card) {
     // if it's a red suit, render suit in red; otherwise default to white on
     //  black for clubs/spades
     if(redSuits.indexOf(suit) != -1) result += '\u001b[31;1m';
-    result += suitCharacterMap[suit];
+    result += suit;
     if(redSuits.indexOf(suit) != -1) result += '\u001b[0m';
 
     return result;
