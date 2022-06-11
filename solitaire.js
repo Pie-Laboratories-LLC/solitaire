@@ -129,8 +129,7 @@ function playGame() {
         }
         if(input == '2') {
             // restore the deck.
-            if(deck.length) console.log `${deck.length ? "Deck is not empty; ":""}${!kitty.length ? "Upstack is empty; ": ""}can't redeal; something's broken!`;
-            if(!kitty.length) throw `kitty is empty; can't redeal; something's broken!`;
+            if(deck.length) console.log(`${deck.length ? "Deck is not empty; ":""}${!kitty.length ? "Upstack is empty; ": ""}can't redeal; something's broken!`);
             // this restores the deck, without shuffling.
             while(kitty.length) deck.push(kitty.shift());
             continue;
