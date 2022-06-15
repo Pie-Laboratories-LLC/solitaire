@@ -156,6 +156,7 @@ function playGame() {
             // restore the deck.
             if(deck.length || !kitty.length) {
                 console.log(`${deck.length ? "Deck is not empty; ":""}${!kitty.length ? "Upstack is empty; ": ""}can't redeal; something's broken!`);
+                extraLineCount++;
                 continue;
             }
             // this restores the deck, without shuffling.
