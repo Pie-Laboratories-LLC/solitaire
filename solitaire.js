@@ -98,7 +98,9 @@ function playGame() {
             //  face-up card in column b".
             // we put this in a variable to reuse in the regular expression;
             //  the player moves from one location to another.
-            let locationPattern = 'k(?:itty)?|u\\s*[1-4]|[a-g]\\s*\\d{0,2}';
+            // n.b.: support negative values for column moves, which is easier
+            //  if you just want to count from the bottom.
+            let locationPattern = 'k(?:itty)?|u\\s*[1-4]|[a-g]\\s*-?\\d{0,2}';
             // this is what a move looks like: "from -> to" or "from, to", or
             //  even "from to".
             let moveRegex = new RegExp(`^\\s*(${locationPattern})\\s*(?:->|to|,)?\\s*(${locationPattern})`,'i');
@@ -485,7 +487,6 @@ function gameMoveTo(game,fromCards,to) {
     board[locationColumnIndex(to)].push(...fromCards);
 }
 
-
 function gamePerformMove(game,from,to) {
     let deck = game[0];
     let board = game[1];
@@ -567,7 +568,7 @@ function gamePerformMove(game,from,to) {
         //  dollars riding in your professional vegas solitaire match,
         //  people gonna get sued.  So we'll print a nice message and
         //  continue.
-        throw new Exception(`LOGIC ERROR! Oops, the from location ${from} is different from what I expected`);
+        throw `LOGIC ERROR! Oops, the from location ${from} is different from what I expected`;
     }
 
     // get the specified column from the board.
@@ -584,9 +585,25 @@ function gamePerformMove(game,from,to) {
     // if they're moving card to upSuits, it can *only* be the last
     //  card visible in the column (we validated above...)
     if(locationIsUpSuit(to)) fromIndex = fromColumn.length - 1;
+    else if(locationColumnOffset(from) < 0) {
+        // i.e., the column offset is negative, they're counting from the
+        //  last visible card in the column
+        fromIndex = fromColumn.length +  locationColumnOffset(from);
+        // make sure the new index doesn't exceed the number of cards in
+        //  the column
+        if(fromIndex < 0) {
+            response.push(messageInitialize(`There aren't as many cards in column ${columnLetterOf(locationColumnIndex(from))} as indicated by index ${locationColumnOffset(from)}`));
+            return gameResponseInitialize(false, response);
+        }
+        // make sure the specified card is visible in the column
+        if(!fromColumn[fromIndex][1]) {
+            response.push(messageInitialize(`The card at index ${locationColumnOffset(from)} in column ${columnLetterOf(locationColumnIndex(from))} is not visible.`));
+            return gameResponseInitialize(false, response);
+        }
+    }
     else {
         // they're not moving the card to the upSuit, assume they're
-        //  moving the visible card in the column
+        //  moving all the the visible cards in the column
         while(fromIndex < fromColumn.length && !fromColumn[fromIndex][1]) fromIndex++;
         if(fromIndex >= fromColumn.length) {
             response.push(messageInitialize(`There are no visible cards in column ${fromMatch[1]}`));
@@ -696,7 +713,7 @@ function deckShuffle(deck) {
 
 function locationInitialize(move) {
     let localMove = move.replaceAll(/\s+/g,'').toLowerCase();
-    let localMoveMatch = localMove.match(/^([a-g])(\d*)$/);
+    let localMoveMatch = localMove.match(/^([a-g])\s*(-?\d*)$/);
     if(localMoveMatch) {
         // determine the index of the column; ascii magic: subtract the
         //  character code of 'a' from the character code of the column.
