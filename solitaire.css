@@ -1,0 +1,35 @@
+#solitaire {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    overflow: scroll;
+}
+#solitaire canvas {
+    position: absolute;
+}
+#message-board {
+    position: absolute;
+    background-color: white;
+    padding: 10px;
+    bottom: 10px;
+    left: 10px;
+    width: auto;
+    height: auto;
+    z-index: 1;
+}
+#message-board  {
+    white-space: nowrap;
+}
+#message-board .x-bar {
+    min-height: 1em;
+    background-color: lightgrey;
+}
+#message-board .x-bar::after {
+    content: "x";
+    float: right;
+    cursor: pointer;
+    vertical-align: top;
+}
+#message-board .red-suit {
+    color: red;
+}

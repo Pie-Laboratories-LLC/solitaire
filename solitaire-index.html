@@ -1,0 +1,97 @@
+<meta charset="utf-8">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.27.2/axios.min.js" integrity="sha512-odNmoc1XJy5x1TMVMdC7EMs3IVdItLPlCeL5vSUPN2llYKMJ2eByTTAIiiuqLg+GdNr9hF6z81p27DArRFKT7A==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<link rel="stylesheet" href="./solitaire.css" type="text/css"></link>
+<div id="solitaire">
+<canvas class="solitaire"></canvas>
+</div>
+<script type="module">
+import { CardSuit } from './Card.js';
+import SolitaireGame from './SolitaireGame.js';
+import SolitaireCanvasRenderer from './SolitaireCanvasRenderer.js';
+let canvasContainer = document.getElementById('solitaire');
+if(!canvasContainer) throw new Error("Couldn't find solitaire canvas container element :(");
+let canvases = canvasContainer.getElementsByTagName('canvas');
+if(canvases.length != 1) throw new Error("Couldn't find solitaire canvas element :(");
+let canvas = canvases[0];
+canvas.focus();
+let solitaire = new SolitaireGame(renderCard,renderSuit);
+let cardPromise = loadImage('Pictures/MaryWollstonecraft.jpg');
+let cardFacePromise = loadImage('Pictures/SVG-Cards-2.0.1/svg-cards.svg');
+let backgroundPromise = loadImage('Pictures/BG.png');
+
+Promise.all([cardPromise,cardFacePromise,backgroundPromise]).then((promiseResults) => {
+    let cardBgImage = promiseResults[0];
+    let cardFaces = promiseResults[1];
+    let bgImage = promiseResults[2];
+    let jimmy = new SolitaireCanvasRenderer({
+        bgImage,
+        card: {
+            bgImage: cardBgImage,
+            bgImageFillColour: 'black',
+            bgImageStrokeColour: 'black',
+            cardFaceSvg: (card) => {
+                let column;
+                switch(card.value.toLowerCase()) {
+                case 'k': column = 12; break;
+                case 'q': column = 11; break;
+                case 'j': column = 10; break;
+                default: column = card.valueIndex;
+                }
+                let row;
+                switch(card.suit) {
+                case '♣': row = 0; break;
+                case '♠': row = 3; break;
+                case '♦': row = 1; break;
+                case '♥': row = 2; break;
+                default: throw new Error(`unexpected suit ${card.suit}`);
+                }
+                return [ cardFaces, column * 167.5, row* 243, 168, 243 ];
+            },
+            fillColour: 'white',
+            strokeColour: 'blue',
+            minWidth: 155,
+            minHeight: 225,
+            roundness: 10,
+            padding: 5
+        }
+    },canvasContainer,canvas,solitaire);
+    jimmy.pending.then(() => {
+        jimmy.render();
+    });
+});
+
+function loadImage(url) {
+    const image = new Image();
+    image.src = url;
+    return new Promise((resolve,reject) => {
+        image.onload = () => {
+            resolve(image);
+        };
+        image.onerror = (e) => {
+            reject(`Couldn't load image`,e);
+        };
+    });
+}
+function renderCard(card) {
+    // bright white.
+    let result = card.value;
+    result += renderSuit(card);
+    return result;
+}
+
+function renderSuit(card) {
+    let result = '';
+
+    // if it's a red suit, render suit in red; otherwise default to white on
+    //  black for clubs/spades
+    if(CardSuit.isRedSuit(card.suit)) result += '<span class="red-suit">';
+    else result += '<span class="black-suit">';
+    result += card.suit;
+    result += '</span>';
+
+    return result;
+}
+</script>
+<p>
+By John Opie - Tate Britain, Public Domain, https://commons.wikimedia.org/w/index.php?curid=2358904
+</p>
