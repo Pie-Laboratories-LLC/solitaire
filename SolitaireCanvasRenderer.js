@@ -8,8 +8,9 @@ import SolitaireGame from './SolitaireGame.js';
 export default class SolitaireCanvasRenderer {
     get pending() { return this.#downCardPromise; }
     #config;
-    #canvas;
     #canvasContainer;
+    #canvas;
+    #cards;
     #messageBoard;
     #solitaire;
     #locations;
@@ -17,10 +18,9 @@ export default class SolitaireCanvasRenderer {
     #typing;
     #selected;
     #downCardPromise;
-    #svg;
+    #cardBackSvg;
     #bgImageRenderingProperties;
-    #deckBounds;
-    #kittyBounds;
+    #bounds;
     #upSuitBounds;
     #boardBounds;
     #animations;
@@ -29,20 +29,22 @@ export default class SolitaireCanvasRenderer {
         this.#config = config
         this.#canvasContainer = canvasContainer;
         this.#canvas = canvas;
-        let width = this.#canvasContainer.offsetWidth;
-        let height = this.#canvasContainer.offsetHeight;
-        canvas.width = width;
-        canvas.height = height;
         this.#solitaire = solitaire;
         this.#locations = [];
         if(!this.#config.bgImage) throw new Error(`You must specify bgImage!`);
         if(!this.#config.hasOwnProperty('card')) throw new Error(`I can't find the configuration for cards! :(`);
-        if(this.#config.card.hasOwnProperty('labelFont') && !this.#config.card.hasOwnProperty('labelFontHeight')) throw new Error(`If you specify card.labelFont, you must also specify card.labelFontHeight`);
-        if(this.#config.card.hasOwnProperty('faceLabelFont') && !this.#config.card.hasOwnProperty('faceLabelFontHeight')) throw new Error(`If you specify card.faceLabelFont, you must also specify card.faceLabelFontHeight`);
-        if(this.#config.card.hasOwnProperty('aceLabelFont') && !this.#config.card.hasOwnProperty('aceLabelFontHeight')) throw new Error(`If you specify card.aceLabelFont, you must also specify card.aceLabelFontHeight`);
         this.#downCardPromise = this.#loadCardBackground();
+        let resize = () => {
+            this.#calculateKittyBounds();
+            let canvasHeight = this.#calculateCanvasHeight();
+            this.#canvas.height = canvasHeight;
+            this.#canvasContainer.height = `${canvasHeight}px`;
+            this.#canvas.width = this.#canvasContainer.clientWidth;
+        }
+        resize();
         this.#downCardPromise.then((results) => {
-            this.#svg = results[0];
+            this.#initializeCards();
+            this.#cardBackSvg = results[0];
             this.#bgImageRenderingProperties = results[1];
             this.#canvas.onclick = (e) => {
                 this.#click(e);
@@ -51,19 +53,38 @@ export default class SolitaireCanvasRenderer {
                 this.#keyUp(e);
             };
             document.body.onresize = (e) => {
+                resize();
                 this.render();
             };
         });
     }
 
     render() {
-        if(!this.#svg || !this.#bgImageRenderingProperties) throw new Error(`Too soon: I haven't loaded the background image for the cards...`);
+        if(!this.#cardBackSvg || !this.#bgImageRenderingProperties) throw new Error(`Too soon: I haven't loaded the background image for the cards...`);
         let canvasHeight = this.#calculateCanvasHeight();
         this.#canvas.height = canvasHeight;
-        this.#canvasContainer.height = `${canvasHeight}px`;
-        this.#canvas.width = this.#canvasContainer.clientWidth;
         this.#doRender();
         this.#renderMessages();
+    }
+
+    #initializeCards() {
+        this.#cards = { };
+        if(this.#solitaire.deckLength) {
+            this.#cards.deck = {
+                isDown: true,
+                bounds: this.#bounds.kitty.deckCard
+            };
+        }
+        if(this.#solitaire.kittyLength) {
+            let kitty = this.#solitaire.kitty;
+            for(let index = 0; index < kitty.length; index++) {
+                this.#cards[`kitty-${index}`] = {
+                    card: kitty[index],
+                    bounds: this.#bounds.kitty[`kitty-${index}`],
+                    isDown: false
+                };
+            }
+        }
     }
 
     #doRender() {
@@ -77,8 +98,9 @@ export default class SolitaireCanvasRenderer {
         let padding = this.#calculatePadding(minWidth,minHeight);
         this.#renderKitty(ctx,padding,minWidth,minHeight);
         this.#renderUpSuits(ctx,width,height,padding,minWidth,minHeight);
-        let kittyBottom = this.#calculateKittyBottom(padding,minHeight,this.#getConfigLabelFontHeight());
-        let boardBound = this.#renderBoard(ctx,width,height,minWidth,minHeight,kittyBottom);
+        let boardBound = this.#renderBoard(ctx,width,height,minWidth,minHeight);
+        this.#renderCards(ctx);
+        this.#renderAnimations(ctx);
         if(this.#selected) {
             let selectedColour = this.#config.selectedColour ? this.#config.selectedColour : 'rgba(200,200,255,0.5)';
             ctx.fillStyle = selectedColour;
@@ -89,6 +111,13 @@ export default class SolitaireCanvasRenderer {
         }
         if(this.#typing) {
             this.#renderTyping(ctx,padding,this.#canvasContainer.clientWidth);
+        }
+    }
+
+    #renderCards(ctx) {
+        for(let card of Object.values(this.#cards)) {
+            if(card.isDown) this.#drawCardDown(ctx,card.bounds);
+            else this.#drawCardUp(ctx,card.card,card.bounds);
         }
     }
 
@@ -123,18 +152,15 @@ export default class SolitaireCanvasRenderer {
     }
 
     #renderTyping(ctx,padding,width) {
-        let labelColour = this.#getConfigLabelColour();
-        let labelFont = this.#getConfigLabelFont();
-        let labelFontHeight = this.#getConfigLabelFontHeight();
-        this.#label(ctx,this.#typing,labelColour,labelFont,1,width/ 2,padding + labelFontHeight);
+        this.#label(ctx,this.#typing,width/ 2,padding);
     }
 
     #calculateCanvasHeight() {
         let minWidth = this.#getConfigCardMinWidth();
         let minHeight = this.#getConfigCardMinHeight();
         let padding = this.#calculatePadding(minWidth,minHeight);
-        let labelFontHeight = this.#getConfigLabelFontHeight();
-        let canvasHeight = this.#calculateKittyBottom(padding,minHeight,labelFontHeight);
+        let canvasHeight = this.#bounds.kitty.kittyBounds.y + this.#bounds.kitty.kittyBounds.height;
+
         // def-o kludgey here; we want to calculate the height of the board,
         //  we'll go through, figure out the column with the most cards,
         //  figure out the height of that, and add to canvas height from
@@ -145,7 +171,7 @@ export default class SolitaireCanvasRenderer {
             if(columnCount[0] > maxCardCount) maxCardCount = columnCount[0];
         }
         if(maxCardCount) {
-            canvasHeight += (maxCardCount - 1) * (minHeight / 5);
+            canvasHeight += (maxCardCount - 1) * (minHeight / this.#getConfigStackUpCardVisibleRatio());
             canvasHeight += minHeight;
             // for the bottom below
             canvasHeight += padding;
@@ -153,8 +179,9 @@ export default class SolitaireCanvasRenderer {
         return canvasHeight;
     }
 
-    #renderBoard(ctx,width,height,minWidth,minHeight,boardStartY) {
+    #renderBoard(ctx,width,height,minWidth,minHeight) {
         let solitaire = this.#solitaire;
+        let boardStartY = this.#calculateKittyBottom();
         let emptyBoardColour = this.#config.emptyBoardColour ? this.#config.emptyBoardColour : 'green';
         let boardColumnSpacing = minWidth / 5;
         let lineWidth = 3;
@@ -189,7 +216,7 @@ export default class SolitaireCanvasRenderer {
                     continue;
                 }
                 if(offset < columnLength[1]) {
-                    this.#drawCardDown(ctx,boardStartX + lineWidth, boardStartY + lineWidth);
+                    this.#drawCardDown(ctx,{ x: boardStartX + lineWidth, y: boardStartY + lineWidth });
                     any = true;
                     boardBounds[index].push({
                         x: boardStartX, y: boardStartY,
@@ -200,7 +227,7 @@ export default class SolitaireCanvasRenderer {
                 }
                 if(offset < columnLength[0]) {
                     let card = solitaire.peekColumnCard(index, offset);
-                    this.#drawCardUp(ctx,card,boardStartX + lineWidth, boardStartY + lineWidth,minWidth,minHeight);
+                    this.#drawCardUp(ctx,card,{ x: boardStartX + lineWidth, y: boardStartY + lineWidth, width: minWidth, height: minHeight });
                     any = true;
                     boardBounds[index].push({
                         x: boardStartX, y: boardStartY,
@@ -215,7 +242,7 @@ export default class SolitaireCanvasRenderer {
             }
             if(!any) break;
             offset++;
-            boardStartY += minHeight / 5;
+            boardStartY += minHeight * this.#getConfigStackUpCardVisibleRatio();
         }
         this.#boardBounds = boardBounds;
         return boardBottom;
@@ -224,9 +251,7 @@ export default class SolitaireCanvasRenderer {
     #renderUpSuits(ctx,width,height,padding,minWidth,minHeight) {
         let solitaire = this.#solitaire;
         let emptyUpSuitColour = this.#config.emptyUpSuitColour ? this.#config.emptyUpSuitColour : 'white';
-        let labelColour = this.#getConfigLabelColour();
-        let labelFont = this.#getConfigLabelFont();
-        let labelFontHeight = this.#getConfigLabelFontHeight();
+        let labelPadding = this.#getConfigLabelPadding(padding);
         let upSuitX = width - padding;
         let upSuitY = padding;
         let lineWidth = 3;
@@ -246,86 +271,164 @@ export default class SolitaireCanvasRenderer {
                 x: upSuitX, y: upSuitY,
                 width: upSuitRectWidth, height: upSuitRectHeight
             });
-            this.#label(ctx,`U   ${index}`,labelColour,labelFont,1,upSuitX + upSuitRectWidth / 2,upSuitY + upSuitRectHeight + 2* labelFontHeight);
+            this.#label(ctx,`U   ${index}`,upSuitX + upSuitRectWidth / 2,upSuitY + upSuitRectHeight + labelPadding,undefined,undefined,undefined,'top');
             if(solitaire.getUpSuitLength(index - 1)) {
                 let upSuitCard = solitaire.peekUpSuit(index - 1);
-                this.#drawCardUp(ctx,upSuitCard,upSuitX + lineWidth, upSuitY + lineWidth,minWidth,minHeight);
+                this.#drawCardUp(ctx,upSuitCard,{ x: upSuitX + lineWidth, y: upSuitY + lineWidth, width: minWidth, height: minHeight });
             }
             upSuitX -= upSuitSpacing;
         }
         this.#upSuitBounds = upSuitBounds;
     }
 
-    #renderKitty(ctx,padding,minWidth,minHeight) {
+    #calculateKittyBounds() {
         let solitaire = this.#solitaire;
-        let emptyKittyColour = this.#config.emptyKittyColour ? this.#config.emptyKittyColour : 'yellow';
-        let emptyDeckColour = this.#config.emptyDeckColour ? this.#config.emptyDeckColour : 'green';
-        let labelColour = this.#config.labelColour ? this.#config.labelColour : 'white';
-        let labelFont = this.#config.labelFont ? this.#config.labelFont : 'bold 18px system-ui';
-        let labelFontHeight = this.#config.labelFontHeight ? this.#config.labelFontHeight : 18;
+        let minWidth = this.#getConfigCardMinWidth();
+        let minHeight = this.#getConfigCardMinHeight();
+        let padding = this.#calculatePadding(minWidth,minHeight);
         let kittyX = padding;
         let kittyY = padding;
-        let emptyKittyHeight = minHeight * 1.15;
-        let lineWidth = 3;
-        let deckRectWidth = minWidth + 2* lineWidth;
-        let deckRectHeight = minHeight + 2* lineWidth;
+        let kittyLineWidth = this.#getConfigKittyLineWidth();
+        let emptyKittyHeight = minHeight * this.#getConfigKittyFrameVPadding() + 2* kittyLineWidth;
+        let kittyWidth = minWidth +  2* minWidth * this.#getConfigKittyShownCardPercentage();
+        let emptyKittyWidth = kittyWidth * this.#getConfigKittyFrameHPadding() + 2* kittyLineWidth;
+        let deckLineWidth = this.#getConfigKittyDeckLineWidth();
+        let deckRectWidth = minWidth + 2* deckLineWidth;
+        let deckRectHeight = minHeight + 2* deckLineWidth;
         let deckOffsetY = (emptyKittyHeight - deckRectHeight) / 2;
-        ctx.strokeStyle = emptyDeckColour;
-        ctx.lineWidth = lineWidth;
-        ctx.beginPath();
-        ctx.rect(kittyX,kittyY+deckOffsetY,deckRectWidth,deckRectHeight);
-        this.#deckBounds = {
+        let labelPadding = this.#getConfigLabelPadding(padding);
+
+        if(!this.#bounds) this.#bounds = {};
+        this.#bounds.kitty = {};
+        this.#bounds.kitty.deck = {
             x: kittyX, y: kittyY + deckOffsetY,
             width: deckRectWidth, height: deckRectHeight
         };
-        ctx.closePath();
-        ctx.stroke();
-        if(solitaire.deckLength) {
-            this.#drawCardDown(ctx,kittyX + lineWidth,kittyY+deckOffsetY+lineWidth)
-        }
-        lineWidth = 1;
+        this.#bounds.kitty.deckCard = {
+            x: kittyX + deckLineWidth, y: kittyY + deckOffsetY + deckLineWidth,
+            width: minWidth, height: minHeight
+        };
+
         let deckKittySpacing = minWidth / 5;
         kittyX += (deckRectWidth + deckKittySpacing);
-        deckKittySpacing = minWidth / 8;
+        this.#bounds.kitty.kitty = {
+            x: kittyX, y: kittyY,
+            width: emptyKittyWidth, height: emptyKittyHeight
+        }
+        this.#bounds.kitty.kittyLabel = {
+            x: kittyX + kittyWidth / 2,y: kittyY + emptyKittyHeight + labelPadding
+        };
+        this.#bounds.kitty.kittyBounds = {
+            x: padding,y: padding,
+            width: kittyX + emptyKittyWidth - padding,height: kittyY + emptyKittyHeight + 3 * labelPadding - padding
+        };
+
+        kittyX += (emptyKittyWidth - kittyWidth) / 2;
+        kittyY += deckOffsetY;
+        for(let index = 0; index < solitaire.kittyCount; index++) {
+            this.#bounds.kitty[`kitty-${index}`] = {
+                x: kittyX,y: kittyY,width: minWidth, height: minHeight
+            }
+            kittyX += minWidth * this.#getConfigKittyShownCardPercentage();
+        }
+    }
+
+    #calculateKittyBottom() {
+        return this.#bounds.kitty.kittyBounds.y + this.#bounds.kitty.kittyBounds.height;
+    }
+
+    #calculateBoardBounds() {
+        let solitaire = this.#solitaire;
+        let width = canvas.offsetWidth;
+        let height = canvas.offsetHeight;
+        let boardStartY = this.#calculateKittyBottom();
+        let minWidth = this.#getConfigCardMinWidth();
+        let minHeight = this.#getConfigCardMinHeight();
+        let boardColumnSpacing = minWidth * this.#getConfigBoardColumnPaddingRatio();
+        let lineWidth = 3;
+        let boardWidth = solitaire.columnCount * (minWidth+ lineWidth* 2) + boardColumnSpacing * (solitaire.columnCount - 1);
+        let boardStartX = (width - boardWidth) / 2;
+        if(!this.#bounds) this.#bounds = {};
+        this.#bounds.board = {};
+
+        let maxY = 0;
+        for(let index = 0; index < solitaire.columnCount; index++) {
+            let boardY = boardStartY;
+            let bounds = {
+                x: boardStartX,
+                y: boardY,
+                width: minWidth + lineWidth * 2,
+                height: minHeight + lineWidth * 2
+            };
+            // NOTE: board may be empty, so this would be bottom of the page
+            if(boardY + lineWidth*2 + minHeight > maxY) maxY = boardY + lineWidth*2 + minHeight;
+            this.#bounds.board[`column-${index}`] = {...bounds};
+            let columnLength = solitaire.getColumnLength(index);
+            for(let offset = 0; offset < columnLength[0]; offset++) {
+                bounds = {
+                    x: boardStartX + lineWidth,
+                    y: boardY + lineWidth,
+                    width: minWidth,
+                    height: minHeight,
+                }
+                if(boardY + lineWidth + minHeight > maxY) maxY = boardY + lineWidth + minHeight > maxY;
+                this.#bounds[`column-${index}-${offset}`] = bounds;
+                if(offset < columnLength[1]) boardY += minHeight * this.#getConfigStackDownCardVisibleRatio();
+                else boardY += minHeight * this.#getConfigStackUpCardVisibleRatio();
+            }
+            boardStartX += (minWidth+ lineWidth* 2+ boardColumnSpacing)
+        }
+        this.#bounds.board.boardBounds = {
+            x: (width - boardWidth) / 2,
+            y: this.#calculateKittyBottom(),
+            width: boardWidth,
+            height: maxY - this.#calculateKittyBottom()
+        }
+    }
+
+    #renderKitty(ctx,padding,minWidth,minHeight) {
+        let solitaire = this.#solitaire;
+        let emptyKittyColour = this.#getConfigKittyEmptyColour();
+        let emptyDeckColour = this.#getConfigKittyEmptyDeckColour();
+        let lineWidth = this.#getConfigKittyDeckLineWidth();
+        ctx.strokeStyle = emptyDeckColour;
+        ctx.lineWidth = lineWidth;
+        ctx.beginPath();
+        ctx.rect(this.#bounds.kitty.deck.x,this.#bounds.kitty.deck.y,
+                 this.#bounds.kitty.deck.width,this.#bounds.kitty.deck.height);
+        ctx.closePath();
+        ctx.stroke();
+        lineWidth = this.#getConfigKittyLineWidth();
+        let deckKittySpacing = minWidth / 5;
         ctx.strokeStyle = emptyKittyColour;
         ctx.lineWidth = lineWidth;
-        let kittyWidth = minWidth +  2* minWidth/ 3;
         ctx.beginPath();
-        ctx.rect(kittyX,kittyY,kittyWidth * 1.15,emptyKittyHeight);
+        ctx.rect(this.#bounds.kitty.kitty.x,this.#bounds.kitty.kitty.y,
+                 this.#bounds.kitty.kitty.width,this.#bounds.kitty.kitty.height);
         ctx.closePath();
         ctx.stroke();
 
-        let kittyBottom = this.#calculateKittyBottom(padding,minHeight,labelFontHeight);
-        this.#label(ctx,'K      I      T      T      Y',labelColour,labelFont,1, kittyX + kittyWidth / 2,kittyBottom - labelFontHeight);
+        this.#label(ctx,'K      I      T      T      Y',this.#bounds.kitty.kittyLabel.x,this.#bounds.kitty.kittyLabel.y,undefined,undefined,undefined,'top');
 
-        let kittyBounds;
+/*
         if(solitaire.kittyLength) {
             let kitty = solitaire.kitty;
-            kittyX += (kittyWidth * 1.15 - kittyWidth) / 2;
-            kittyY += deckOffsetY;
-            for(let card of kitty) {
-                this.#drawCardUp(ctx,card,kittyX,kittyY,minWidth,minHeight);
-                kittyBounds = {
-                    x: kittyX, y: kittyY,
-                    width: minWidth, height: minHeight
-                };
-                kittyX += minWidth / 3;
+            for(let index = 0; index < kitty.length; index++) {
+                let card = kitty[index];
+                let bounds = this.#bounds.kitty[`kitty-${index}`];
+                this.#drawCardUp(ctx,card,bounds);
             }
         }
-        this.#kittyBounds = kittyBounds;
+ */
     }
 
-    #calculateKittyBottom(padding,minHeight,labelFontHeight) {
-        return padding + (minHeight * 1.15) + 3* labelFontHeight;
-    }
-
-    #label(ctx,label,labelColour,labelFont,lineWidth,x,y) {
-        ctx.lineWidth = lineWidth;
+    #label(ctx,label,x,y,labelColour,labelFont,textAlign,textBaseline) {
+        labelColour = labelColour ? labelColour : this.#getConfigLabelColour();
+        labelFont = labelFont ? labelFont : this.#getConfigLabelFont();
         ctx.fillStyle = labelColour;
         ctx.font = labelFont;
-        ctx.lineWidth = lineWidth;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'alphabetic';
+        ctx.textAlign = textAlign ? textAlign : 'center';
+        ctx.textBaseline = textBaseline ? textBaseline : 'alphabetic';
         ctx.beginPath();
         ctx.fillText(label, x, y);
         ctx.closePath();
@@ -344,37 +447,33 @@ export default class SolitaireCanvasRenderer {
         }
     }
 
-    #drawCardUp(ctx,card,x,y,minWidth,minHeight) {
+    #drawCardUp(ctx,card,bounds) {
         let config = this.#config.card;
         if(config.cardFaceSvg) {
             let svgDetails = config.cardFaceSvg(card);
-            ctx.drawImage(svgDetails[0],svgDetails[1],svgDetails[2],svgDetails[3],svgDetails[4],x,y,minWidth,minHeight);
+            ctx.drawImage(svgDetails[0],svgDetails[1],svgDetails[2],svgDetails[3],svgDetails[4],bounds.x,bounds.y,bounds.width,bounds.height);
             return;
         }
-        let padding = this.#getConfigCardPadding();
-        let hPadding = this.#getConfigCardHPadding(padding);
-        let vPadding = this.#getConfigCardVPadding(padding);
+        let hPadding = this.#getConfigCardHPadding();
+        let vPadding = this.#getConfigCardVPadding();
         let roundness = this.#getConfigCardRoundness();
         let hRoundness = this.#getConfigCardHRoundness(roundness);
         let vRoundness = this.#getConfigCardVRoundness(roundness);
-        let fillColour = config.fillColour ? config.fillColour : 'white';
-        let strokeColour = config.strokeColour ? config.strokeColour : 'blue';
+        let fillColour = this.#getConfigCardFaceFillColour();
+        let strokeColour = this.#getConfigCardFaceStrokeColour();
         let labelBlackColour = this.#config.card.labelBlackColour ? this.#config.labelBlackColour : 'black';
         let labelRedColour = this.#config.card.labelRedColour ? this.#config.labelRedColour : 'red';
-        let labelFont = this.#config.card.labelFont ? this.#config.labelFont : 'bold 32px serif';
-        let labelFontHeight = this.#config.card.labelFontHeight ? this.#config.labelFontHeight : 32;
+        let cardCornerLabelFont = this.#config.card.cardCornerLabelFont ? this.#config.cardCornerLabelFont : 'bold 32px serif';
         let faceLabelFont = this.#config.card.faceLabelFont ? this.#config.faceLabelFont : 'bold 50px serif';
-        let faceLabelFontHeight = this.#config.card.faceLabelFontHeight ? this.#config.faceLabelFontHeight : 50;
         let aceLabelFont = this.#config.card.aceLabelFont ? this.#config.aceLabelFont : 'bold 120px serif';
-        let aceLabelFontHeight = this.#config.card.aceLabelFontHeight ? this.#config.aceLabelFontHeight : 120;
         ctx.fillStyle = fillColour;
         ctx.strokeStyle = strokeColour;
-        ctx.roundRect(x,y,minWidth,minHeight,{hRoundness,vRoundness},true,true);
+        ctx.roundRect(bounds.x,bounds.y,bounds.width,bounds.height,{hRoundness,vRoundness},true,true);
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
         if(CardSuit.isRedSuit(card.suit)) ctx.fillStyle = labelRedColour;
         else ctx.fillStyle = labelBlackColour;
-        ctx.font = labelFont;
+        ctx.font = cardCornerLabelFont;
         ctx.beginPath();
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
@@ -533,13 +632,13 @@ export default class SolitaireCanvasRenderer {
         ctx.restore();
     }
 
-    #drawCardDown(ctx,x,y) {
-        let svgImage = this.#svg;
+    #drawCardDown(ctx,bounds) {
+        let svgImage = this.#cardBackSvg;
         let bgImage = this.#config.card.bgImage;
-        ctx.drawImage(svgImage,x,y);
+        ctx.drawImage(svgImage,bounds.x,bounds.y);
         ctx.drawImage(bgImage,
-            x + this.#bgImageRenderingProperties.imageX,
-            y + this.#bgImageRenderingProperties.imageY,
+            bounds.x + this.#bgImageRenderingProperties.imageX,
+            bounds.y + this.#bgImageRenderingProperties.imageY,
             this.#bgImageRenderingProperties.imageWidth,
             this.#bgImageRenderingProperties.imageHeight
         );
@@ -547,6 +646,42 @@ export default class SolitaireCanvasRenderer {
 
     #calculatePadding(minWidth,minHeight) {
         return minWidth > minHeight ? minWidth / 10 : minHeight / 10
+    }
+
+    #getConfigKittyEmptyColour() {
+       return this.#config.kitty && this.#config.kitty.emptyColour ? this.#config.kitty.emptyColour : 'yellow';
+    }
+
+    #getConfigKittyEmptyDeckColour() {
+       return this.#config.kitty && this.#config.kitty.emptyDeckColour ? this.#config.kitty.emptyDeckColour : 'green';
+    }
+
+    #getConfigKittyFramePadding() {
+       return this.#config.kitty && this.#config.kitty.framePadding ? this.#config.kitty.framePadding : 1.15;
+    }
+
+    #getConfigKittyFrameVPadding() {
+        return this.#config.kitty && this.#config.kitty.frameVPadding ? this.#config.kitty.frameVPadding : this.#getConfigKittyFramePadding();
+    }
+
+    #getConfigKittyFrameHPadding() {
+        return this.#config.kitty && this.#config.kitty.frameHPadding ? this.#config.kitty.frameHPadding : this.#getConfigKittyFramePadding();
+    }
+
+    #getConfigKittyShownCardPercentage() {
+        return this.#config.kitty && this.#config.kitty.shownCardPercentage ? this.#config.kitty.shownCardPercentage : (1 / 3);
+    }
+
+    #getConfigKittyDeckLineWidth() {
+        return this.#config.kitty && this.#config.kitty.deckLineWidth ? this.#config.kitty.deckLineWidth : 3;
+    }
+
+    #getConfigKittyLineWidth() {
+        return this.#config.kitty && this.#config.kitty.lineWidth ? this.#config.kitty.lineWidth : 1;
+    }
+
+    #getConfigLabelPadding(padding) {
+        return this.#config.labelPadding ? this.#config.labelPadding : padding;
     }
 
     #getConfigLabelColour() {
@@ -561,6 +696,17 @@ export default class SolitaireCanvasRenderer {
         return this.#config.labelFontHeight ? this.#config.labelFontHeight : 18;
     }
 
+    #getConfigStackUpCardVisibleRatio() {
+        return this.#config.stackUpCardVisibleRatio ? this.#config.this.#config.stackUpCardVisibleRatio : 1 / 5;
+    }
+
+    #getConfigStackDownCardVisibleRatio() {
+        return this.#config.stackDownCardVisibleRatio ? this.#config.this.#config.stackDownCardVisibleRatio : 1 / 6;
+    }
+
+    #getConfigBoardColumnPaddingRatio() {
+        return this.#config.boardColumnPaddingRatio ? this.#config.this.#config.boardColumnPaddingRatio : 1 / 5;
+    }
     #getConfigCardMinWidth() {
         return this.#config.card.minWidth ? this.#config.card.minWidth : 300
     }
@@ -574,11 +720,11 @@ export default class SolitaireCanvasRenderer {
     }
 
     #getConfigCardHPadding(padding) {
-        return this.#config.card.hPadding ? this.#config.card.hPadding : padding
+        return this.#config.card.hPadding ? this.#config.card.hPadding : this.#getConfigCardPadding();
     }
 
     #getConfigCardVPadding(padding) {
-        return this.#config.card.vPadding ? this.#config.card.vPadding : padding
+        return this.#config.card.vPadding ? this.#config.card.vPadding : this.#getConfigCardPadding();
     }
 
     #getConfigCardRoundness() {
@@ -591,6 +737,14 @@ export default class SolitaireCanvasRenderer {
 
     #getConfigCardVRoundness(roundness) {
         return this.#config.card.vRoundness ? this.#config.card.vRoundness : roundness
+    }
+
+    #getConfigCardFaceFillColour() {
+        return this.#config.card.fillColour ? this.#config.card.fillColour : 'white';
+    }
+
+    #getConfigCardFaceStrokeColour() {
+        return config.strokeColour ? config.strokeColour : 'blue';
     }
 
     #loadCardBackground() {
@@ -673,16 +827,207 @@ export default class SolitaireCanvasRenderer {
             if(matchedIndex != -1) count -= (matchedIndex + 1);
         }
 
-        /*
         if(!this.#animations) this.#animations = [];
-        for(let index = 0; index < count; index++) {
-            this.#animations.push({
-                type: 'kitty',
-            });
+        let kittyCount = this.#solitaire.kittyCount;
+
+        let slideCount = originalKitty.length + count - kittyCount;
+        if(slideCount) {
+            this.#cards['kitty-junk'] = {
+                card: originalKitty[0],
+                bounds: {...this.#bounds.kitty[`kitty-0`]},
+                isDown: false
+            }
+            for(let index = 1; index < originalKitty.length; index++) {
+                let animation = {
+                    id: `ks-${index}`,
+                    type: (ctx,animation) => this.#slide(ctx,animation),
+                    card: originalKitty[index],
+                    duration: 500* index,
+                    start: () => delete this.#cards[`kitty-${index}`],
+                    startPosition: this.#bounds.kitty[`kitty-${index}`]
+                };
+                if(index - slideCount <= 0) {
+                    animation.endPosition =  this.#bounds.kitty[`kitty-0`];
+                    animation.finish = () => this.#cards['kitty-junk'] = {
+                        card: originalKitty[index],
+                        bounds: this.#bounds.kitty['kitty-0'],
+                        isDown: false
+                    };
+                }
+                else {
+                    animation.endPosition = this.#bounds.kitty[`kitty-${index - slideCount}`];
+                    animation.finish = () => this.#cards[`kitty-${index - slideCount}`] = {
+                        card: oldKitty[index],
+                        bounds: {...this.#bounds.kitty[`kitty-${index - slideCount}`]},
+                        isDown: false
+                    };
+                }
+                this.#animations.push(animation);
+            }
         }
-        */
+
+        let shift = 0;
+        if(originalKitty.length + count > kittyCount) shift = originalKitty.length + count - kittyCount;
+        let makeKittyFlip = (index) => {
+            let destinationPosition = originalKitty.length + index - shift;
+            let start;
+            if(index == count - 1 && !this.#solitaire.deckLength) start = () => delete this.#cards.deck;
+            let id = `k${index}`;
+            let kittyIndex = kittyCount - count + index;
+            let animation = {
+                id,
+                type: (ctx,animation) => this.#flipCard(ctx,animation),
+                startPosition: this.#bounds.kitty.deckCard,
+                endPosition:  this.#bounds.kitty[`kitty-${destinationPosition}`],
+                duration: 1750 + index * 500,
+                card: newKitty[kittyIndex],
+                down: true,
+                finish: () => {
+                    if(!index) delete this.#cards['kitty-junk'];
+                    this.#cards[`kitty-${kittyIndex}`] = {
+                        card: newKitty[kittyIndex],
+                        bounds: this.#bounds.kitty[`kitty-${kittyIndex}`],
+                        isDown: false
+                    }
+                }
+            };
+            if(start) animation.start = [ start ];
+            this.#animations.push(animation);
+            if(index < count - 1) setTimeout(() => makeKittyFlip(index+1),750);
+        }
+        makeKittyFlip(0);
 
         return response;
+    }
+
+    #redeal() {
+        let solitaire = this.#solitaire;
+        let originalKitty = solitaire.wholeKitty;
+        let response = solitaire.redeal();
+        if(!response) return response;
+
+        if(!this.#animations) this.#animations = [];
+        // a closure to redeal from the kitty to the deck.  We'll do this
+        //  every 500ms or whatever until the kitty's been redealt.
+        let redeal = (index) => {
+            let animation = {
+                id: 'redeal',
+                startPosition: {...this.#bounds.kitty['kitty-0']},
+                endPosition: {...this.#bounds.kitty.deck},
+                type: (ctx,animation) => this.#flipCard(ctx,animation),
+                card: originalKitty[index],
+                down: false,
+                duration: 750,
+                finish: () => {
+                    if(index == originalKitty.length - 1 && !this.#cards.deck) {
+                        this.#cards.deck = {
+                            isDown: true,
+                            bounds: this.#bounds.kitty.deckCard
+                        };
+                    }
+                    if(index) this.#cards['kitty-0'] = {
+                        isDown: false,
+                        card: originalKitty[index - 1],
+                        bounds: this.#bounds.kitty['kitty-0']
+                    }
+                    else delete this.#cards['kitty-0'];
+                }
+            };
+            if(!this.#animations) this.#animations = [];
+            this.#animations.push(animation);
+            if(index > 0) setTimeout(() => redeal(index - 1),250);
+            this.render();
+        }
+
+        // if the kitty has more than one card face up, slide them back
+        //  into a stack.
+        let calledRedeal = false;
+        for(let index = 1; index < solitaire.kittyCount && index < originalKitty.length; index++) {
+            let last = index == solitaire.kittyCount - 1 || index == originalKitty.length - 1;
+            let card = originalKitty[originalKitty.length - solitaire.kittyCount + index];
+            let animation = {
+                id: `rs-${index}`,
+                startPosition: this.#bounds.kitty[`kitty-${index}`],
+                endPosition: this.#bounds.kitty[`kitty-0`],
+                duration: 500 * index,
+                card,
+                type: (ctx,animation) => this.#slide(ctx,animation),
+                start: () => delete this.#cards[`kitty-${index}`],
+                finish: () => this.#cards[`kitty-0`] = {
+                    isDown: false,
+                    card,
+                    bounds: {...this.#bounds.kitty[`kitty-0`]}
+                }
+            }
+            if(last) {
+                calledRedeal = true;
+                animation.finish = () => {
+                    // note, setTimeout: 0 => will run after animations render
+                    setTimeout(() => redeal(originalKitty.length - 1), 0);
+                }
+            }
+            this.#animations.push(animation);
+        }
+
+        if(!calledRedeal) redeal(originalKitty.length - 1);
+
+        return response;
+    }
+
+    #renderAnimations(ctx) {
+        if(!this.#animations) return;
+        let startTime = new Date();
+        let finishedAnimationIndexes = [];
+        for(let index in this.#animations) {
+            let animation = this.#animations[index];
+            if(!animation.duration) throw new Error(`animation ${animation.id} has no duration!`);
+            if(!animation.startTime) {
+                animation.startTime = new Date();
+                animation.percentage = 0;
+                if(animation.hasOwnProperty('start')) {
+                    if(!Array.isArray(animation.start)) animation.start(animation);
+                    else animation.start.forEach((s) => s(animation));
+                }
+            }
+            else {
+                animation.percentage = (startTime - animation.startTime)/ animation.duration;
+                if(animation.percentage < 0) animation.percentage = 0;
+                else if(animation.percentage > 1) animation.percentage = 1;
+            }
+            if(startTime - animation.startTime > animation.duration) {
+                if(animation.hasOwnProperty('finish')) {
+                    if(!Array.isArray(animation.finish)) animation.finish(animation);
+                    else animation.finish.forEach((f) => f(animation));
+                }
+                finishedAnimationIndexes.push(index);
+                continue;
+            }
+            if(animation.hasOwnProperty('type')) {
+                if(!Array.isArray(animation.type)) animation.type(ctx,animation);
+                else animation.type.forEach((t) => t(ctx,animation));
+            }
+        }
+        finishedAnimationIndexes.sort((a,b) => {
+            if(a < b) return 1;
+            if(a > b) return -1;
+            return 0;
+        });
+
+        for(let index of finishedAnimationIndexes.reverse()) {
+            this.#animations.splice(index,1);
+        }
+        if(this.#animations.length) {
+            let fps = this.#config.fps ? this.#config.fps : 30;
+            let msPerFrame = 1000/ fps;
+            let duration = new Date() - startTime;
+            let delay = 0;
+            if(duration > msPerFrame) delay = 0;
+            else setTimeout(() => this.render(),msPerFrame - duration);
+        }
+        else {
+            this.#animations = undefined;
+            this.render();
+        }
     }
 
     #click(e) {
@@ -709,7 +1054,7 @@ export default class SolitaireCanvasRenderer {
             this.render();
             return;
         }
-        if(inBounds(e,this.#deckBounds)) {
+        if(inBounds(e,this.#bounds.kitty.deck)) {
             if(this.#locations.length || this.#selected) {
                 this.#messages = [
                     new GameMessage(`Invalid Move!`)
@@ -726,16 +1071,19 @@ export default class SolitaireCanvasRenderer {
                 if(solitaire.deckLength) {
                     response = this.#dealToKitty();
                 }
-                else response = solitaire.redeal();
+                else response = this.#redeal();
                 this.#messages = response.messages;
             }
             this.render();
             return;
         }
         let selected;
-        if(inBounds(e,this.#kittyBounds)) {
-            this.#locations.push(new Location('k'));
-            selected = {...this.#kittyBounds};
+        if(!selected) {
+            let kittyIndex = (this.#solitaire.kittyLength > 3 ? 3 : this.#solitaire.kittyLength) - 1;
+            if(kittyIndex >= 0 && inBounds(e,this.#bounds.kitty[`kitty-${kittyIndex}`])) {
+                this.#locations.push(new Location('k'));
+                selected = {...this.#bounds.kitty[`kitty-${kittyIndex}`]};
+            }
         }
         if(!selected) {
             for(let index = 0; index < this.#upSuitBounds.length; index++) {
@@ -842,6 +1190,34 @@ export default class SolitaireCanvasRenderer {
             }
         }
         this.render();
+    }
+
+    #flipCard(ctx,animation) {
+        let startX = animation.startPosition.x;
+        let endX = animation.endPosition.x;
+        let startY = animation.startPosition.y;
+        let endY = animation.endPosition.y;
+        let x = startX + (endX - startX) * animation.percentage;
+        let y = startY + (endY - startY) * animation.percentage;
+        this.#drawCardDown(ctx,{x,y});
+    }
+
+    #slide(ctx,animation) {
+        let startX = animation.startPosition.x;
+        let endX = animation.endPosition.x;
+        let startY = animation.startPosition.y;
+        let endY = animation.endPosition.y;
+        let x = startX + (endX - startX) * animation.percentage;
+        let y = startY + (endY - startY) * animation.percentage;
+        if(!Array.isArray(animation.card)) this.#drawCardUp(ctx,animation.card,{x,y,width:animation.startPosition.width,height:animation.startPosition.height});
+        else {
+            let minHeight = this.#getConfigCardMinHeight();
+            let yDelta = minHeight * this.#getConfigStackUpCardVisibleRatio();
+            animation.card.forEach((c) => {
+                this.#drawCardUp(ctx,c,{x,y,width:animation.startPosition.width,height:animation.startPosition.height})
+                y += yDelta;
+            });
+        }
     }
 }
 

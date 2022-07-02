@@ -15,6 +15,7 @@ if(canvases.length != 1) throw new Error("Couldn't find solitaire canvas element
 let canvas = canvases[0];
 canvas.focus();
 let solitaire = new SolitaireGame(renderCard,renderSuit);
+solitaire.cheeseKitty();
 let cardPromise = loadImage('Pictures/MaryWollstonecraft.jpg');
 let cardFacePromise = loadImage('Pictures/SVG-Cards-2.0.1/svg-cards.svg');
 let backgroundPromise = loadImage('Pictures/BG.png');
@@ -47,6 +48,7 @@ Promise.all([cardPromise,cardFacePromise,backgroundPromise]).then((promiseResult
                 }
                 return [ cardFaces, column * 167.5, row* 243, 168, 243 ];
             },
+            cardFaceAspect: 168 / 243,
             fillColour: 'white',
             strokeColour: 'blue',
             minWidth: 155,

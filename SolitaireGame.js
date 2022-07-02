@@ -18,8 +18,13 @@ export default class SolitaireGame {
     // this is what a move looks like: "from -> to" or "from, to", or
     //  even "from to".
     static MOVE_REGEX = new RegExp(`^\\s*(${SolitaireGame.LOCATION_PATTERN})\\s*(?:->|to|,)?\\s*(${SolitaireGame.LOCATION_PATTERN})`,'i');
+    // number of columns on the board
     get columnCount() { return this.#board.columnCount; }
+    // number of upsuit columns
     get upSuitCount() { return this.#upSuits.length; }
+    // number of cards that can be visible in kitty: kittyLength is the number
+    //  of cards actually in the kitty
+    get kittyCount() { return 3; }
     get deckLength() { return this.#deck.length; }
     get kittyLength() { return this.#kitty.length; }
     get kitty() {
@@ -31,6 +36,9 @@ export default class SolitaireGame {
         }
         return kitty;
     }
+    get wholeKitty() {
+        return [...this.#kitty];
+    }
     #deck;
     #board;
     #kitty;
@@ -38,28 +46,38 @@ export default class SolitaireGame {
     #renderCardCallback;
     #renderSuitCallback;
 
-    constructor(renderCard,renderSuit) {
+    constructor(renderCard,renderSuit,deck,kitty,board,upSuits) {
         // create a deck & shuffle it
-        let deck = new Deck(false);
-        deck.shuffle();
+        if(!deck) {
+            deck = new Deck(false);
+            deck.shuffle();
+        }
+        else if(!(deck instanceof Deck)) throw new Error(`someone's trying to pass something off as a deck!`);
         this.#deck = deck;
 
         // initialize the board and deal the first set of cards.
-        let board = new SolitaireBoard();
-        board.deal(deck);
-
+        if(!board) {
+            board = new SolitaireBoard();
+            board.deal(deck);
+        }
+        else if(!(board instanceof SolitaireBoard)) throw new Error(`someone's trying to pass something off as a board!`);
         this.#board = board;
 
         // I dunno what the face up cards dealt from the left over deck is
         //  called in your professional vegas solitaire circles, but based on
         //  every movie & series about con men that I've seen, I'm going with
         //  kitty! 😸
-        this.#kitty = [];
+        if(!kitty) kitty = [];
+        this.#kitty = kitty;
 
         // upSuits is where we keep the cards ace to king of each suit.  an
         //  array of an array for each suit.  Each of that array will just be
         //  the card, e.g., AC, 2C, etc.
-        this.#upSuits = [new Column(),new Column(),new Column(),new Column()];
+        if(!upSuits) {
+            upSuits = [];
+            for(let index = 0; index < CardSuit.allSuits.length; index++) upSuits.push(new Column());
+        }
+        this.#upSuits = upSuits;
 
         this.#renderCardCallback = renderCard;
         this.#renderSuitCallback = renderSuit;
@@ -90,8 +108,12 @@ export default class SolitaireGame {
 
         // deal three cards from the deck, or as many as may be left if
         //  less than three
-        for(let i = 0; i < 3 && this.#deck.length; i++) this.#kitty.push(this.#deck.deal());
+        for(let i = 0; i < this.kittyCount && i < this.#deck.length; i++) this.#kitty.push(this.#deck.deal());
         return new GameResponse(true,response);
+    }
+
+    cheeseKitty() {
+        while(this.#deck.length) this.#kitty.push(this.#deck.deal());
     }
 
     redeal() {
