@@ -41,7 +41,16 @@ export class Column {
 export class SolitaireBoard {
     get columnCount() { return this.#board.length; }
     #board = [];
-    constructor() {
+    constructor(board) {
+        if(typeof board !== 'undefined') {
+            if(!Array.isArray(board)) throw new Error(`Initializer is not an array of board!`);
+            if(board.length != 7) throw new Error(`Initializer does not have 7 columns!`);
+            for(let index = 0; index < board.length; index++) {
+                if(!board[index] instanceof Column) throw new Error(`Initializer column ${index} is not a Column!`);
+            }
+            this.#board = board;
+            return;
+        }
         // initialize the board.  There are 7 columns.  n.b.: what if we wanted
         //  to play with four decks and 15 columns?
         // The board will be an array .. of arrays.  Each column in the board

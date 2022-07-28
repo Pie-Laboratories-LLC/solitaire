@@ -1,30 +1,46 @@
-#solitaire {
-    position: absolute;
+#solitaire .canvas-container {
+    position: relative;
     width: 100%;
-    height: 100%;
-    overflow: scroll;
+    overflow: hidden;
 }
-#solitaire canvas {
+#solitaire .credits {
+    position: relative;
+    top: 0px;
+}
+.overlay {
+}
+.overlay .dialog {
     position: absolute;
+    top: 2em;
+    margin: auto;
+    border: 1px solid black;
+    background-color: white;
+    padding: 1em;
+    width: 40%;
+    left: 0;
+    right: 0;
+    margin: 1px solid black;
 }
 #message-board {
     position: absolute;
     background-color: white;
-    padding: 10px;
-    bottom: 10px;
-    left: 10px;
+    padding: 1em;
+    bottom: 2em;
+    left: 2em;
     width: auto;
     height: auto;
     z-index: 1;
-}
-#message-board  {
+    border: 1px solid black;
     white-space: nowrap;
 }
-#message-board .x-bar {
+#message-board .spacer {
+    margin-bottom: 0.5em;
+}
+.x-bar {
     min-height: 1em;
     background-color: lightgrey;
 }
-#message-board .x-bar::after {
+.x-bar::after {
     content: "x";
     float: right;
     cursor: pointer;

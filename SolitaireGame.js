@@ -39,11 +39,24 @@ export default class SolitaireGame {
     get wholeKitty() {
         return [...this.#kitty];
     }
+    get anyCard() {
+        if(this.#deck.length) return this.#deck.peek;
+        if(this.#kitty.length) return this.#kitty[this.#kitty.length - 1];
+        for(let index = 0; index < this.upSuitCount; index++) if(this.#upSuits[index].length) return this.#upSuits[index].peekCard();
+        for(let index = 0; index < this.#board.columnCount; index++) {
+            let length = this.#board.getColumnLength(index);
+            if(!length[2]) continue;
+            return this.#board.peekColumnCard(index);
+        }
+        throw new Error(`I can't seem to find a card to return :(`);
+    }
     #deck;
     #board;
     #kitty;
     #upSuits;
+    get renderCard() { return this.#renderCardCallback; }
     #renderCardCallback;
+    get renderSuit() { return this.#renderSuitCallback; }
     #renderSuitCallback;
 
     constructor(renderCard,renderSuit,deck,kitty,board,upSuits) {
@@ -93,7 +106,7 @@ export default class SolitaireGame {
         if(this.#deck.length || this.#kitty.length) return false;
         // ...we infer the cards must all be in upSuits.
         // let's go ahead and validate the upSuits have 13 cards each
-        for(let upSuitIndex in this.#upSuits) if(upSuits[upSuitIndex].length != 13) throw `upSuit ${upSuitIndex} does not have length 13!`;
+        for(let upSuitIndex in this.#upSuits) if(this.#upSuits[upSuitIndex].length != 13) throw `upSuit ${upSuitIndex} does not have length 13!`;
 
         return true;
     }
@@ -108,7 +121,7 @@ export default class SolitaireGame {
 
         // deal three cards from the deck, or as many as may be left if
         //  less than three
-        for(let i = 0; i < this.kittyCount && i < this.#deck.length; i++) this.#kitty.push(this.#deck.deal());
+        for(let i = 0; i < this.kittyCount && this.#deck.length; i++) this.#kitty.push(this.#deck.deal());
         return new GameResponse(true,response);
     }
 
@@ -128,6 +141,28 @@ export default class SolitaireGame {
     }
 
     doFini() {
+        // a "closure;" a little bit of reusable code to determine if a card
+        //  can go in an upsuit
+        let upSuitMatch = (card) => {
+            // loop through the upSuits until we find the same suit as this card
+            for(let index in this.#upSuits) {
+                let upSuit = this.#upSuits[index];
+
+                if(!upSuit.length) {
+                    // special case: can move ace to an empty upSuit column.
+                    if(card.valueIndex == 0) {
+                        return [ true, index, undefined ];
+                    }
+                    continue;
+                }
+
+                let upSuitCard = upSuit.peekCard();
+                if(upSuitCard.suit != card.suit) continue;
+                return [ true, index, upSuitCard ];
+            }
+            return [ false ];
+        };
+
         // loop through each column, check if its last card can be moved to an
         //  upSuit
         for(let columnIndex = 0; columnIndex < this.#board.columnCount; columnIndex++) {
@@ -135,41 +170,70 @@ export default class SolitaireGame {
             if(!columnLength[0]) continue;
 
             // take the last card from the column
-            let lastCard = this.#board.peekColumnCard(columnIndex);
-            let upCard;
-            let suitMatch = false;
+            let columnCard = this.#board.peekColumnCard(columnIndex);
 
-            // a "closure;" a little bit of reusable code we'll use to pop the
-            //  card from the column, add to upSuit, and flip over the topmost
-            //  card in the column if it's not empty.
-            let moveCard = () => {
-                this.#board.splice(columnIndex,1);
-                upSuit.push(lastCard,true);
-            }
+            // see if the card in the column matches what's in the up suit
+            let upSuitMatchResult = upSuitMatch(columnCard);
+            if(!upSuitMatchResult[0]) continue;
 
-            // loop through the upSuits until we find the same suit as this card
-            for(let upSuit of this.#upSuits) {
-                if(!upSuit.length) {
-                    // special case: can move ace to an empty upSuit column.
-                    if(lastCard.valueIndex == 0) {
-                        moveCard();
-                        return true;
-                    }
-                    continue;
-                }
-                upCard = upSuit.peekCard();
-                if(upCard.suit != lastCard.suit) continue;
-                suitMatch = true;
-                break;
-            }
-            if(!suitMatch) continue;
+            // get the card that matched, if it's not an empty column
+            let upSuitIndex = upSuitMatchResult[1];
+            let upSuitCard = upSuitMatchResult[2];
 
             // verify that the card from the board is one higher than the upSuit
-            if(lastCard.valueIndex != upCard.valueIndex + 1) continue;
-            moveCard();
-            return true;
+            // NOTE - upSuitCard will not be set if upSuit is empty
+            if(upSuitCard && (columnCard.valueIndex != upSuitCard.valueIndex + 1)) continue;
+            return [
+                new Location(LocationType.COLUMN,columnIndex,-1),
+                new Location(LocationType.UPSUIT,upSuitIndex),
+            ];
         }
-        return false;
+
+        if(!this.#kitty.length && this.#deck.length) return 'deal';
+
+        if(this.#kitty.length) {
+            let kittyCard = this.#kitty[this.#kitty.length - 1];
+
+            // see if the card in the kitty matches what's in an up suit
+            let upSuitMatchResult = upSuitMatch(kittyCard);
+            if(upSuitMatchResult[0]) {
+                // get the card that matched, if it's not an empty column
+                let upSuitIndex = upSuitMatchResult[1];
+                let upSuitCard = upSuitMatchResult[2];
+
+                // verify that the card from the board is one higher than the upSuit
+                // NOTE - upSuitCard will not be set if upSuit is empty
+                if(!upSuitCard || (kittyCard.valueIndex == upSuitCard.valueIndex + 1)) return [
+                    new Location(LocationType.KITTY),
+                    new Location(LocationType.UPSUIT,upSuitIndex),
+                ];
+            }
+
+            // see if we can deal from kitty to any column
+            for(let columnIndex = 0; columnIndex < this.#board.columnCount; columnIndex++) {
+                let columnLength = this.#board.getColumnLength(columnIndex);
+                if(!columnLength[0]) continue;
+
+                // take the last card from the column
+                let columnCard = this.#board.peekColumnCard(columnIndex);
+
+                if(CardSuit.isRedSuit(kittyCard.suit) && CardSuit.isRedSuit(columnCard.suit)) continue;
+                if(CardSuit.isBlackSuit(kittyCard.suit) && CardSuit.isBlackSuit(columnCard.suit)) continue;
+
+                // verify that the card from the board is one higher than the upSuit
+                // NOTE - upSuitCard will not be set if upSuit is empty
+                if(columnCard.valueIndex != kittyCard.valueIndex + 1) continue;
+                return [
+                    new Location(LocationType.KITTY),
+                    new Location(LocationType.COLUMN,columnIndex,-1)
+                ];
+            }
+        }
+
+        if(this.#kitty.length && !this.#deck.length) return 'redeal';
+        else if(this.#deck.length) return 'deal';
+
+        return undefined;
     }
 
     validateMove(fromCard,to) {
@@ -192,7 +256,7 @@ export default class SolitaireGame {
             // make sure the card being moved is the next card for this suit.
             //  little surprising it's as difficult as it is to do this.
             if(fromCard.valueIndex != upSuitCard.valueIndex + 1) {
-                response.push(new GameMessage(`Can't put ${this.#renderCard(fromCard)} (${fromCard.valueIndex}) on ${this.#renderCard(upSuit[upSuit.length - 1])} (${upSuitCard.valueIndex})`));
+                response.push(new GameMessage(`Can't put ${this.#renderCard(fromCard)} (${fromCard.valueIndex}) on ${this.#renderCard(upSuitCard)} (${upSuitCard.valueIndex})`));
                 return new GameResponse(false,response);
             }
             return new GameResponse(true,response);
@@ -244,7 +308,7 @@ export default class SolitaireGame {
         let response = [];
 
         // do some validation.
-        if(to.type == LocationType.COLUMN && to.offset > 0) {
+        if(to.type == LocationType.COLUMN && (to.offset > 0 || to.offset < -1)) {
             response.push(new GameMessage(`You can't specify offset in the column to which you're moving!`));
             return new GameResponse(false, response);
         }
@@ -284,7 +348,7 @@ export default class SolitaireGame {
             // perform the move.  Note we have a nice method so when we
             //  go to move we don't have to go through the same logic over
             //  and over and over.
-            this.#moveTo([ fromCard ],to);
+            this.#moveTo([ fromCard ],to,response);
             return new GameResponse(true, response);
         }
 
@@ -302,7 +366,7 @@ export default class SolitaireGame {
                 return new GameResponse(false, response);
             }
             upSuitColumn.splice(upSuitColumn.length - 1);
-            this.#moveTo([ fromCard ],to);
+            this.#moveTo([ fromCard ],to,response);
             return new GameResponse(true, response);
         }
 
@@ -365,7 +429,6 @@ export default class SolitaireGame {
         }
 
         fromCard = this.#board.peekColumnCard(from.index,fromOffset);
-        if(fromCard == 'QH') response.push(new GameMessage('The joker is the only foo-hoo-hoo, who\'ll do anything with you!'));
         if(from.type == LocationType.COLUMN && SolitaireBoard.columnLetterOf(from.index) == 'F' && to.type == LocationType.OFFSET && to.index == 1) response.push(new GameMessage('RUDE!!!!!!!'));
 
         // make sure the move is valid
@@ -378,7 +441,7 @@ export default class SolitaireGame {
         // extract all of the indicated cards from the column
         let cards = this.#board.splice(from.index,fromOffset);
 
-        this.#moveTo(cards,to);
+        this.#moveTo(cards,to,response);
 
         return new GameResponse(true, response);
     }
@@ -412,7 +475,9 @@ export default class SolitaireGame {
         return card.suit;
     }
 
-    #moveTo(fromCards,to) {
+    #moveTo(fromCards,to,response) {
+        if(fromCards[0].suit == '♥' && fromCards[0].value == 'Q') response.push(new GameMessage('The joker is the only foo-hoo-hoo, who\'ll do anything with you!'));
+
         if(to.type == LocationType.UPSUIT) {
             // moving to an upSuit?
             if(fromCards.length != 1) throw new Error(`LOGIC ERROR! - can't move ${fromCards.length} card(s) to upSuit!`);

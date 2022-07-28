@@ -14,6 +14,29 @@ export class Location {
     #index;
     #offset;
     constructor(move) {
+        if([LocationType.KITTY,
+            LocationType.COLUMN,
+            LocationType.UPSUIT].indexOf(move) != -1) {
+            let type = arguments[0];
+            this.#type = type;
+            switch(type) {
+            case LocationType.KITTY: break;
+            case LocationType.COLUMN:
+                if(arguments.length != 3) throw new Error(`Invalid column move type initializer, expected 3 total arguments, got ${arguments.length}`);
+                if(typeof arguments[1] === 'undefined') throw new Error(`Invalid column move type initializer, index is undefined`);
+                if(typeof arguments[2] === 'undefined') throw new Error(`Invalid column move type initializer, offset is undefined`);
+                this.#index = arguments[1];
+                this.#offset = arguments[2];
+                break;
+            case LocationType.UPSUIT:
+                if(arguments.length != 2) throw new Error(`Invalid upsuit move type initializer, expected 2 total arguments, got ${arguments.length}`);
+                if(typeof arguments[1] === 'undefined') throw new Error(`Invalid upsuit move type initializer, index is undefined`);
+                this.#index = arguments[1];
+                break;
+            default: throw new Error(`Invalid multi-argument constructor: unrecognized type ${type} with ${arguments.length} arguments`);
+            }
+            return;
+        }
         let localMove = move.replaceAll(/\s+/g,'').toLowerCase();
         let localMoveMatch = localMove.match(/^([a-g])\s*(-?\d*)$/);
         if(localMoveMatch) {

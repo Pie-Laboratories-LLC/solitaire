@@ -2,8 +2,14 @@ import { CardValues, CardSuit, Card } from './Card.js';
 
 export default class Deck {
     get length() { return this.#deck.length; }
+    get peek() { if(!this.#deck.length) throw new Error(`Can't peek an empty deck!`); return this.#deck[this.#deck.length - 1]; }
     #deck;
     constructor(aceHigh) {
+        if(Array.isArray(aceHigh)) {
+            if(aceHigh.length) aceHigh.forEach((c) => { if(!c instanceof Card) throw new Error(`The provided array does not contain cards!`); });
+            this.#deck = aceHigh;
+            return;
+        }
         if(typeof aceHigh === 'undefined') aceHigh = true;
 
         this.#deck = [];

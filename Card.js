@@ -22,6 +22,11 @@ export class CardValues {
         if(indexOf == -1) throw new Error(`Card demonination ${value} is not among ${this.#values}`);
         return indexOf;
     }
+
+    getValue(index) {
+        if(index >= this.#values.length || index < 0) throw new Error(`Card index ${index} doesn't exist!`);
+        return this.#values[index];
+    }
 }
 
 export class CardSuit {
@@ -50,6 +55,7 @@ export class Card {
     get value() { return this.#value; }
     get valueIndex() { return this.#values.getValueIndex(this.#value); }
     get maxValueIndex() { return this.#values.length - 1; }
+    get values() { return this.#values; }
     #suit;
     #value;
     #values;
