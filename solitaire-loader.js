@@ -3,11 +3,28 @@ import { SolitaireBoard,Column } from './SolitaireBoard.js';
 import Deck from './Deck.js';
 import SolitaireGame from './SolitaireGame.js';
 import SolitaireCanvasRenderer from './SolitaireCanvasRenderer.js';
+// Bundled by webpack (see webpack.config.js's asset/resource and
+// asset/source rules), not fetched at runtime -- there used to be an
+// axios.get() for each of the three HTML fragments here, which meant
+// anything embedding this bundle also had to have axios as a global (never
+// declared as an actual dependency anywhere, easy to miss) and had to serve
+// these files itself at the right relative path. Importing them lets
+// webpack package everything the game needs into one build.
+import cardBackUrl from './Pictures/MaryWollstonecraft.jpg';
+import cardFaceUrl from './Pictures/SVG-cards-2.0.1/svg-cards.svg';
+import bgUrl from './Pictures/BG.png';
+import winnerHtml from './solitaire-winner.html';
+import helpHtml from './solitaire-help.html';
+import startHtml from './solitaire-start.html';
 
 export default class SolitiareLoader {
     #solitaire;
     #solitaireCanvasRenderer;
-    constructor() {
+    // container defaults to #solitaire for the standalone demo
+    // (solitaire-index.html); an embedder can instead pass its own element
+    // directly, so it doesn't have to own a page-global id="solitaire".
+    constructor(container) {
+        this.#solitaireDiv = container ?? document.getElementById('solitaire');
         try {
             this.#initialize();
         }
@@ -38,7 +55,6 @@ export default class SolitiareLoader {
     #canvasContainer;
     #canvas;
     #initialize() {
-        this.#solitaireDiv = document.getElementById('solitaire');
         if(!this.#solitaireDiv) throw new Error("Couldn't find solitaire element :(");
         this.#gameDialog = getSingleElementByClass(this.#solitaireDiv,'solitaireDiv','game-dialog');
         getSingleElementByClass(this.#gameDialog,'gameDialog','x-bar').addEventListener('click',(e) => this.#gameDialog.style = 'display:none');
@@ -53,20 +69,16 @@ export default class SolitiareLoader {
         this.#canvas.focus();
         this.#solitaireDiv.addEventListener('solitaire',(e) => this.#solitaireEvent(e));
         this.#solitaire = this.#makeSolitaire();
-        let cardPromise = this.#loadImage('Pictures/MaryWollstonecraft.jpg');
-        let cardFacePromise = this.#loadImage('Pictures/SVG-cards-2.0.1/svg-cards.svg');
-        let backgroundPromise = this.#loadImage('Pictures/BG.png');
-        let winnerPromise = axios.get('./solitaire-winner.html');
-        let helpPromise = axios.get('./solitaire-help.html');
-        let startPromise = axios.get('./solitaire-start.html');
-        Promise.all([cardPromise,cardFacePromise,backgroundPromise,
-                     winnerPromise,helpPromise,startPromise]).then((promiseResults) => {
+        this.#winnerHtml = winnerHtml;
+        this.#helpHtml = helpHtml;
+        this.#startHtml = startHtml;
+        let cardPromise = this.#loadImage(cardBackUrl);
+        let cardFacePromise = this.#loadImage(cardFaceUrl);
+        let backgroundPromise = this.#loadImage(bgUrl);
+        Promise.all([cardPromise,cardFacePromise,backgroundPromise]).then((promiseResults) => {
             let cardBgImage = promiseResults[0];
             let cardFaces = promiseResults[1];
             let bgImage = promiseResults[2];
-            this.#winnerHtml = promiseResults[3].data;
-            this.#helpHtml = promiseResults[4].data;
-            this.#startHtml = promiseResults[5].data;
             this.#solitaireCanvasRenderer = new SolitaireCanvasRenderer({
                 bgImage,
                 card: {
@@ -156,13 +168,7 @@ export default class SolitiareLoader {
 
     #error(e) {
         this.#errorDialog.style = 'display: block';
-        let div;
-        if(e.hasOwnProperty('name') && e.name == 'AxiosError') {
-            div = document.createElement('div');
-            div.append(`Error loading ${e.config.url}`);
-            this.#errorDialogContent.append(div);
-        }
-        div = document.createElement('div');
+        let div = document.createElement('div');
         div.append(e);
         this.#errorDialogContent.append(div);
         if(e.hasOwnProperty('stack')) {
